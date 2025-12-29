@@ -74,17 +74,9 @@ const calculateDeterminant = (matrix) => {
 };
 
 // Matrix solver using Gaussian elimination
-const solveSystem = (A, b, captureSteps = false) => {
+const solveSystem = (A, b) => {
   const n = A.length;
   const aug = A.map((row, i) => [...row.map(c => ({...c})), {...b[i]}]);
-  const steps = [];
-  
-  if (captureSteps) {
-    steps.push({
-      description: 'Initial augmented matrix [A|b]',
-      matrix: aug.map(row => row.map(c => ({...c})))
-    });
-  }
   
   // Forward elimination
   for (let i = 0; i < n; i++) {
@@ -94,16 +86,7 @@ const solveSystem = (A, b, captureSteps = false) => {
       const max = Math.sqrt(aug[maxRow][i].re ** 2 + aug[maxRow][i].im ** 2);
       if (curr > max) maxRow = k;
     }
-    
-    if (maxRow !== i) {
-      [aug[i], aug[maxRow]] = [aug[maxRow], aug[i]];
-      if (captureSteps) {
-        steps.push({
-          description: `Swap row ${i + 1} with row ${maxRow + 1} (partial pivoting)`,
-          matrix: aug.map(row => row.map(c => ({...c})))
-        });
-      }
-    }
+    [aug[i], aug[maxRow]] = [aug[maxRow], aug[i]];
     
     const pivot = aug[i][i];
     const pivotMag = pivot.re ** 2 + pivot.im ** 2;
@@ -114,20 +97,7 @@ const solveSystem = (A, b, captureSteps = false) => {
       for (let j = i; j <= n; j++) {
         aug[k][j] = complexSub(aug[k][j], complexMul(factor, aug[i][j]));
       }
-      if (captureSteps) {
-        steps.push({
-          description: `R${k + 1} = R${k + 1} - (${toRect(factor)}) × R${i + 1}`,
-          matrix: aug.map(row => row.map(c => ({...c})))
-        });
-      }
     }
-  }
-  
-  if (captureSteps) {
-    steps.push({
-      description: 'Upper triangular form (forward elimination complete)',
-      matrix: aug.map(row => row.map(c => ({...c})))
-    });
   }
   
   // Back substitution
@@ -138,22 +108,9 @@ const solveSystem = (A, b, captureSteps = false) => {
       x[i] = complexSub(x[i], complexMul(aug[i][j], x[j]));
     }
     x[i] = complexDiv(x[i], aug[i][i]);
-    if (captureSteps && i < n - 1) {
-      steps.push({
-        description: `Solve for x${i + 1}: ${toRect(x[i])}`,
-        variables: x.map((v, idx) => idx >= i ? ({...v}) : null)
-      });
-    }
   }
   
-  if (captureSteps) {
-    steps.push({
-      description: 'Final solution',
-      variables: x.map(v => ({...v}))
-    });
-  }
-  
-  return captureSteps ? { solution: x, steps } : x;
+  return x;
 };
 
 const complexMul = (a, b) => ({
@@ -229,7 +186,6 @@ const App = () => {
   const [activeInput, setActiveInput] = useState(null); // Track focused input
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
-  const [showSteps, setShowSteps] = useState(false);
   const [matrixOp, setMatrixOp] = useState(null); // 'transpose', 'inverse', null
   const [touchStart, setTouchStart] = useState(null);
   const [touchEnd, setTouchEnd] = useState(null);
@@ -417,9 +373,7 @@ const App = () => {
     try {
       const A = matrix.map(row => row.map(parseComplex));
       const b = vector.map(parseComplex);
-      const result = solveSystem(A, b, showSteps);
-      const x = showSteps ? result.solution : result;
-      const steps = showSteps ? result.steps : null;
+      const x = solveSystem(A, b);
       
       const timestamp = new Date().toLocaleString();
       const historyItem = {
@@ -433,8 +387,7 @@ const App = () => {
         }),
         x_polar: x.map(toPolar),
         x_rect: x.map(toRect),
-        x,
-        steps
+        x
       };
       
       setHistory([historyItem, ...history]);
@@ -620,7 +573,7 @@ const App = () => {
             <strong>How to enter values:</strong><br />
             Complex: 3+4j, -j2, 5, 1.2-3j<br />
             Phasors: 10∠30°, 5∠-90, 3∠0°<br />
-            Max size: 10×10
+            Matrix size: 1×1 to 10×10 (rotate device for larger systems)<br />
           </div>
           
           <div style={{ marginBottom: '20px' }}>
@@ -888,21 +841,6 @@ const App = () => {
             >
               Inverse
             </button>
-            <button
-              onClick={() => setShowSteps(!showSteps)}
-              style={{
-                flex: 1,
-                padding: '10px',
-                background: showSteps ? theme.accent : theme.button,
-                color: showSteps ? '#ffffff' : theme.text,
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '13px'
-              }}
-            >
-              {showSteps ? 'Hide Steps' : 'Show Steps'}
-            </button>
           </div>
           
           {/* Matrix Operation Result */}
@@ -956,8 +894,25 @@ const App = () => {
               borderRadius: '8px',
               padding: '10px'
             }}>
-              <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '8px', color: theme.accent }}>
-                Keyboard Active
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 'bold', color: theme.accent }}>
+                  Keyboard Active
+                </div>
+                <button
+                  onClick={() => setActiveInput(null)}
+                  style={{
+                    padding: '4px 10px',
+                    background: '#ff6b6b',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '5px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  ✕ Close
+                </button>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '6px' }}>
                 {['7', '8', '9', '∠'].map(key => (
@@ -1194,59 +1149,6 @@ const App = () => {
                         x{i+1} = {val} | {h.x_rect[i]}
                       </div>
                     ))}
-                    {h.steps && h.steps.length > 0 && (
-                      <details style={{ marginTop: '15px' }}>
-                        <summary style={{ 
-                          cursor: 'pointer', 
-                          fontWeight: 'bold',
-                          padding: '5px',
-                          background: theme.button,
-                          borderRadius: '5px',
-                          marginBottom: '10px'
-                        }}>
-                          Step-by-Step Solution
-                        </summary>
-                        <div style={{ 
-                          maxHeight: '400px', 
-                          overflowY: 'auto',
-                          padding: '10px',
-                          background: theme.background,
-                          borderRadius: '8px'
-                        }}>
-                          {h.steps.map((step, stepIdx) => (
-                            <div key={stepIdx} style={{ 
-                              marginBottom: '15px',
-                              paddingBottom: '10px',
-                              borderBottom: stepIdx < h.steps.length - 1 ? `1px solid ${theme.border}` : 'none'
-                            }}>
-                              <div style={{ fontWeight: 'bold', marginBottom: '8px', color: theme.primary }}>
-                                Step {stepIdx + 1}: {step.description}
-                              </div>
-                              {step.matrix && (
-                                <div style={{ 
-                                  overflowX: 'auto',
-                                  fontSize: '13px',
-                                  fontFamily: 'monospace'
-                                }}>
-                                  {step.matrix.map((row, ri) => (
-                                    <div key={ri} style={{ marginBottom: '3px' }}>
-                                      [ {row.map(c => toRect(c)).join(' | ')} ]
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              {step.variables && (
-                                <div style={{ fontSize: '14px' }}>
-                                  {step.variables.map((v, vi) => v ? (
-                                    <div key={vi}>x{vi + 1} = {toRect(v)}</div>
-                                  ) : null)}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    )}
                   </div>
                 ))
               )}
