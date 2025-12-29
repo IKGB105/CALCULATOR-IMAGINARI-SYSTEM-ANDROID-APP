@@ -47,6 +47,32 @@ const toRect = (c) => {
   return `${c.re.toFixed(2)} ${sign} ${c.im.toFixed(2)}j`;
 };
 
+// Calculate determinant using Laplace expansion
+const calculateDeterminant = (matrix) => {
+  const n = matrix.length;
+  
+  if (n === 1) return matrix[0][0];
+  
+  if (n === 2) {
+    const a = matrix[0][0], b = matrix[0][1];
+    const c = matrix[1][0], d = matrix[1][1];
+    return complexSub(complexMul(a, d), complexMul(b, c));
+  }
+  
+  let det = { re: 0, im: 0 };
+  for (let j = 0; j < n; j++) {
+    const minor = matrix.slice(1).map(row => row.filter((_, idx) => idx !== j));
+    const cofactor = calculateDeterminant(minor);
+    const term = complexMul(matrix[0][j], cofactor);
+    if (j % 2 === 0) {
+      det = { re: det.re + term.re, im: det.im + term.im };
+    } else {
+      det = { re: det.re - term.re, im: det.im - term.im };
+    }
+  }
+  return det;
+};
+
 // Matrix solver using Gaussian elimination
 const solveSystem = (A, b) => {
   const n = A.length;
@@ -113,6 +139,8 @@ const App = () => {
   const [history, setHistory] = useState([]);
   const [savedSystems, setSavedSystems] = useState([]);
   const [activeInput, setActiveInput] = useState(null); // Track focused input
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
   
   useEffect(() => {
     initializeMatrix(size);
@@ -210,6 +238,7 @@ const App = () => {
   const insertSymbol = (symbol) => {
     if (!activeInput) return;
     
+    saveToUndoStack();
     const { type, i, j } = activeInput;
     if (type === 'matrix') {
       const newMatrix = [...matrix];
@@ -222,6 +251,29 @@ const App = () => {
       newVector[i] = currentValue + symbol;
       setVector(newVector);
     }
+  };
+  
+  const saveToUndoStack = () => {
+    setUndoStack(prev => [...prev, { matrix: [...matrix.map(r => [...r])], vector: [...vector] }]);
+    setRedoStack([]); // Clear redo when new action is made
+  };
+  
+  const undo = () => {
+    if (undoStack.length === 0) return;
+    const previousState = undoStack[undoStack.length - 1];
+    setRedoStack(prev => [...prev, { matrix: [...matrix.map(r => [...r])], vector: [...vector] }]);
+    setMatrix(previousState.matrix);
+    setVector(previousState.vector);
+    setUndoStack(prev => prev.slice(0, -1));
+  };
+  
+  const redo = () => {
+    if (redoStack.length === 0) return;
+    const nextState = redoStack[redoStack.length - 1];
+    setUndoStack(prev => [...prev, { matrix: [...matrix.map(r => [...r])], vector: [...vector] }]);
+    setMatrix(nextState.matrix);
+    setVector(nextState.vector);
+    setRedoStack(prev => prev.slice(0, -1));
   };
   
   const deleteLastChar = () => {
@@ -492,19 +544,51 @@ const App = () => {
                 +
               </button>
             </div>
-            <button
-              onClick={loadExample}
-              style={{
-                padding: '10px 20px',
-                background: theme.button,
-                color: theme.text,
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer'
-              }}
-            >
-              Example
-            </button>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+              <button
+                onClick={loadExample}
+                style={{
+                  padding: '10px 20px',
+                  background: theme.button,
+                  color: theme.text,
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                Example
+              </button>
+              <button
+                onClick={undo}
+                disabled={undoStack.length === 0}
+                style={{
+                  padding: '10px 20px',
+                  background: undoStack.length === 0 ? theme.input : theme.button,
+                  color: theme.text,
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: undoStack.length === 0 ? 'not-allowed' : 'pointer',
+                  opacity: undoStack.length === 0 ? 0.5 : 1
+                }}
+              >
+                ↶ Undo
+              </button>
+              <button
+                onClick={redo}
+                disabled={redoStack.length === 0}
+                style={{
+                  padding: '10px 20px',
+                  background: redoStack.length === 0 ? theme.input : theme.button,
+                  color: theme.text,
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: redoStack.length === 0 ? 'not-allowed' : 'pointer',
+                  opacity: redoStack.length === 0 ? 0.5 : 1
+                }}
+              >
+                ↷ Redo
+              </button>
+            </div>
           </div>
           
           {/* Matrix Input */}
@@ -575,6 +659,34 @@ const App = () => {
               </div>
             </div>
           </div>
+          
+          {/* Determinant Display */}
+          {(() => {
+            try {
+              const A = matrix.map(row => row.map(v => {
+                try { return parseComplex(v || '0'); } catch { return { re: 0, im: 0 }; }
+              }));
+              const det = calculateDeterminant(A);
+              return (
+                <div style={{
+                  marginBottom: '15px',
+                  padding: '12px',
+                  background: theme.input,
+                  borderRadius: '8px',
+                  border: `1px solid ${theme.border}`
+                }}>
+                  <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '5px' }}>
+                    Matrix Determinant:
+                  </div>
+                  <div style={{ fontSize: '15px', fontFamily: 'monospace' }}>
+                    {toPolar(det)} | {toRect(det)}
+                  </div>
+                </div>
+              );
+            } catch {
+              return null;
+            }
+          })()}
           
           <button
             onClick={solve}
