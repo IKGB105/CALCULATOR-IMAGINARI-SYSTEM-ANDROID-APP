@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Complex Calc</string>
+    <string name="title_activity_main">Complex Calc</string>
+    <string name="package_name">com.complexcalc.app</string>
+    <string name="custom_url_scheme">com.complexcalc.app</string>
+</resources>
