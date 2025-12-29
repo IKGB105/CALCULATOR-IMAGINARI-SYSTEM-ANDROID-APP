@@ -167,9 +167,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## 👥 Authors
 
 - **Iker Garcia** - Universidad Autónoma de Aguascalientes (UAA)
-- Das Reyes
-- Roberto Lopez
-- Kevin Lara
 
 ## 📄 License
 
