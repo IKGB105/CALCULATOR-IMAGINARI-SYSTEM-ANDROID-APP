@@ -117,6 +117,7 @@ const App = () => {
   useEffect(() => {
     initializeMatrix(size);
     loadSavedSystems();
+    loadThemePreference();
   }, []);
   
   useEffect(() => {
@@ -129,13 +130,47 @@ const App = () => {
   };
   
   const loadExample = () => {
-    if (size === 3) {
-      setMatrix([
-        ['2+1i', '-1', '0'],
-        ['-1', '2+0.5i', '-1'],
-        ['0', '-1', '2']
-      ]);
-      setVector(['1', '0', '1i']);
+    const examples = {
+      2: {
+        matrix: [
+          ['2+1i', '-1'],
+          ['-1', '2']
+        ],
+        vector: ['1', '1i']
+      },
+      3: {
+        matrix: [
+          ['2+1i', '-1', '0'],
+          ['-1', '2+0.5i', '-1'],
+          ['0', '-1', '2']
+        ],
+        vector: ['1', '0', '1i']
+      },
+      4: {
+        matrix: [
+          ['3', '-1', '0', '0'],
+          ['-1', '3', '-1', '0'],
+          ['0', '-1', '3', '-1'],
+          ['0', '0', '-1', '3']
+        ],
+        vector: ['1', '0', '0', '1']
+      },
+      5: {
+        matrix: [
+          ['4', '-1', '0', '0', '0'],
+          ['-1', '4', '-1', '0', '0'],
+          ['0', '-1', '4', '-1', '0'],
+          ['0', '0', '-1', '4', '-1'],
+          ['0', '0', '0', '-1', '4']
+        ],
+        vector: ['1', '0', '0', '0', '1']
+      }
+    };
+    
+    const example = examples[size];
+    if (example) {
+      setMatrix(example.matrix);
+      setVector(example.vector);
     }
   };
   
@@ -147,10 +182,29 @@ const App = () => {
   
   const cycleTheme = () => {
     setThemeMode(prev => {
-      if (prev === 'dark') return 'light';
-      if (prev === 'light') return 'pink';
-      return 'dark';
+      const newTheme = prev === 'dark' ? 'light' : prev === 'light' ? 'pink' : 'dark';
+      saveThemePreference(newTheme);
+      return newTheme;
     });
+  };
+  
+  const loadThemePreference = async () => {
+    try {
+      const data = await window.storage?.get('themeMode', false);
+      if (data?.value) {
+        setThemeMode(data.value);
+      }
+    } catch (err) {
+      console.error('Load theme error:', err);
+    }
+  };
+  
+  const saveThemePreference = async (theme) => {
+    try {
+      await window.storage?.set('themeMode', theme, false);
+    } catch (err) {
+      console.error('Save theme error:', err);
+    }
   };
   
   const insertSymbol = (symbol) => {
