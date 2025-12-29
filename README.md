@@ -11,12 +11,16 @@ A mobile-optimized calculator for solving systems of linear equations with compl
 
 - **Complex Number Support**: Solve systems with complex numbers (3+4j, 2-5i)
 - **Phasor Notation**: Input in polar form (10∠30°, 5∠-90°)
-- **Custom Keyboard**: Mobile-optimized keyboard with symbols (j, i, ∠, °)
-- **Multiple Themes**: Dark, Light, and Pink themes
+- **Custom Keyboard**: Mobile-optimized keyboard with symbols (j, i, ∠, °) and close button
+- **Multiple Themes**: Dark, Light, and Pink themes with persistent storage
+- **Undo/Redo**: Full undo/redo support for matrix editing
+- **Matrix Operations**: Calculate transpose and inverse matrices
+- **Determinant Display**: Real-time matrix determinant calculation
+- **Swipe Gestures**: Navigate solution history with touch gestures
 - **Solution History**: Save and review previous solutions
 - **Responsive Design**: Optimized for Android mobile screens
 - **Matrix Sizes**: Support for 1×1 up to 10×10 matrices
-- **Gaussian Elimination**: Accurate solver using pivoting
+- **Gaussian Elimination**: Accurate solver using partial pivoting
 
 ## 📱 Screenshots
 
@@ -179,13 +183,11 @@ This project is licensed under the MIT License.
 
 ## 🔮 Future Features
 
-- [ ] Step-by-step solution display
-- [ ] Matrix determinant calculator
-- [ ] Matrix operations (inverse, transpose)
-- [ ] Undo/Redo functionality
-- [ ] More example systems
 - [ ] Export results to PDF
-- [ ] Swipe gestures for history
+- [ ] Share solutions via messaging apps
+- [ ] Voice input for numbers
+- [ ] Matrix calculator mode (A×B, A+B)
+- [ ] Eigenvalues and eigenvectors
 
 ## 📞 Contact
 
