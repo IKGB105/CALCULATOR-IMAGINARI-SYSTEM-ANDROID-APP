@@ -74,9 +74,17 @@ const calculateDeterminant = (matrix) => {
 };
 
 // Matrix solver using Gaussian elimination
-const solveSystem = (A, b) => {
+const solveSystem = (A, b, captureSteps = false) => {
   const n = A.length;
   const aug = A.map((row, i) => [...row.map(c => ({...c})), {...b[i]}]);
+  const steps = [];
+  
+  if (captureSteps) {
+    steps.push({
+      description: 'Initial augmented matrix [A|b]',
+      matrix: aug.map(row => row.map(c => ({...c})))
+    });
+  }
   
   // Forward elimination
   for (let i = 0; i < n; i++) {
@@ -86,7 +94,16 @@ const solveSystem = (A, b) => {
       const max = Math.sqrt(aug[maxRow][i].re ** 2 + aug[maxRow][i].im ** 2);
       if (curr > max) maxRow = k;
     }
-    [aug[i], aug[maxRow]] = [aug[maxRow], aug[i]];
+    
+    if (maxRow !== i) {
+      [aug[i], aug[maxRow]] = [aug[maxRow], aug[i]];
+      if (captureSteps) {
+        steps.push({
+          description: `Swap row ${i + 1} with row ${maxRow + 1} (partial pivoting)`,
+          matrix: aug.map(row => row.map(c => ({...c})))
+        });
+      }
+    }
     
     const pivot = aug[i][i];
     const pivotMag = pivot.re ** 2 + pivot.im ** 2;
@@ -97,7 +114,20 @@ const solveSystem = (A, b) => {
       for (let j = i; j <= n; j++) {
         aug[k][j] = complexSub(aug[k][j], complexMul(factor, aug[i][j]));
       }
+      if (captureSteps) {
+        steps.push({
+          description: `R${k + 1} = R${k + 1} - (${toRect(factor)}) × R${i + 1}`,
+          matrix: aug.map(row => row.map(c => ({...c})))
+        });
+      }
     }
+  }
+  
+  if (captureSteps) {
+    steps.push({
+      description: 'Upper triangular form (forward elimination complete)',
+      matrix: aug.map(row => row.map(c => ({...c})))
+    });
   }
   
   // Back substitution
@@ -108,9 +138,22 @@ const solveSystem = (A, b) => {
       x[i] = complexSub(x[i], complexMul(aug[i][j], x[j]));
     }
     x[i] = complexDiv(x[i], aug[i][i]);
+    if (captureSteps && i < n - 1) {
+      steps.push({
+        description: `Solve for x${i + 1}: ${toRect(x[i])}`,
+        variables: x.map((v, idx) => idx >= i ? ({...v}) : null)
+      });
+    }
   }
   
-  return x;
+  if (captureSteps) {
+    steps.push({
+      description: 'Final solution',
+      variables: x.map(v => ({...v}))
+    });
+  }
+  
+  return captureSteps ? { solution: x, steps } : x;
 };
 
 const complexMul = (a, b) => ({
@@ -131,6 +174,51 @@ const complexSub = (a, b) => ({
   im: a.im - b.im
 });
 
+const complexAdd = (a, b) => ({
+  re: a.re + b.re,
+  im: a.im + b.im
+});
+
+// Matrix transpose
+const transpose = (matrix) => {
+  const n = matrix.length;
+  return Array(n).fill(0).map((_, i) => 
+    Array(n).fill(0).map((_, j) => matrix[j][i])
+  );
+};
+
+// Matrix inverse (for square matrices)
+const calculateInverse = (matrix) => {
+  const n = matrix.length;
+  const det = calculateDeterminant(matrix);
+  const detMag = det.re * det.re + det.im * det.im;
+  
+  if (detMag < 1e-10) throw new Error('Matrix is singular, cannot invert');
+  
+  // For 2x2 matrix
+  if (n === 2) {
+    const [[a, b], [c, d]] = matrix;
+    const invDet = complexDiv({ re: 1, im: 0 }, det);
+    return [
+      [complexMul(d, invDet), complexMul({ re: -b.re, im: -b.im }, invDet)],
+      [complexMul({ re: -c.re, im: -c.im }, invDet), complexMul(a, invDet)]
+    ];
+  }
+  
+  // For larger matrices, use adjugate method
+  const adj = Array(n).fill(0).map((_, i) => 
+    Array(n).fill(0).map((_, j) => {
+      const minor = matrix.filter((_, ri) => ri !== j).map(row => row.filter((_, ci) => ci !== i));
+      const cofactor = calculateDeterminant(minor);
+      const sign = (i + j) % 2 === 0 ? 1 : -1;
+      return { re: cofactor.re * sign, im: cofactor.im * sign };
+    })
+  );
+  
+  const invDet = complexDiv({ re: 1, im: 0 }, det);
+  return adj.map(row => row.map(val => complexMul(val, invDet)));
+};
+
 const App = () => {
   const [size, setSize] = useState(3);
   const [themeMode, setThemeMode] = useState('dark'); // 'dark', 'light', 'pink'
@@ -141,6 +229,11 @@ const App = () => {
   const [activeInput, setActiveInput] = useState(null); // Track focused input
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
+  const [showSteps, setShowSteps] = useState(false);
+  const [matrixOp, setMatrixOp] = useState(null); // 'transpose', 'inverse', null
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  const [swipeIndex, setSwipeIndex] = useState(null); // Track which history item is being swiped
   
   useEffect(() => {
     initializeMatrix(size);
@@ -324,10 +417,12 @@ const App = () => {
     try {
       const A = matrix.map(row => row.map(parseComplex));
       const b = vector.map(parseComplex);
-      const x = solveSystem(A, b);
+      const result = solveSystem(A, b, showSteps);
+      const x = showSteps ? result.solution : result;
+      const steps = showSteps ? result.steps : null;
       
       const timestamp = new Date().toLocaleString();
-      const result = {
+      const historyItem = {
         timestamp,
         size,
         A_polar: matrix.map(row => row.map(v => {
@@ -338,11 +433,12 @@ const App = () => {
         }),
         x_polar: x.map(toPolar),
         x_rect: x.map(toRect),
-        x
+        x,
+        steps
       };
       
-      setHistory([result, ...history]);
-      saveSystem(result);
+      setHistory([historyItem, ...history]);
+      saveSystem(historyItem);
     } catch (err) {
       window.alert(`Error: ${err.message}`);
     }
@@ -379,6 +475,44 @@ const App = () => {
     if (window.confirm('Clear all history?')) {
       setHistory([]);
     }
+  };
+  
+  // Swipe gesture handlers
+  const minSwipeDistance = 50;
+  
+  const onTouchStart = (e, idx) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+    setSwipeIndex(idx);
+  };
+  
+  const onTouchMove = (e, idx) => {
+    if (swipeIndex === idx) {
+      setTouchEnd(e.targetTouches[0].clientX);
+    }
+  };
+  
+  const onTouchEnd = (idx) => {
+    if (!touchStart || !touchEnd || swipeIndex !== idx) return;
+    
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    
+    if (isLeftSwipe && idx < history.length - 1) {
+      // Swipe left to go to next (older) solution
+      const nextSolution = history[idx + 1];
+      loadSavedSystem(nextSolution);
+    }
+    if (isRightSwipe && idx > 0) {
+      // Swipe right to go to previous (newer) solution
+      const prevSolution = history[idx - 1];
+      loadSavedSystem(prevSolution);
+    }
+    
+    setTouchStart(null);
+    setTouchEnd(null);
+    setSwipeIndex(null);
   };
   
   const themes = {
@@ -699,11 +833,119 @@ const App = () => {
               borderRadius: '8px',
               cursor: 'pointer',
               fontSize: '16px',
-              fontWeight: 'bold'
+              fontWeight: 'bold',
+              marginBottom: '10px'
             }}
           >
             Solve System
           </button>
+          
+          {/* Matrix Operations */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+            <button
+              onClick={() => {
+                try {
+                  const A = matrix.map(row => row.map(v => parseComplex(v || '0')));
+                  const transposed = transpose(A);
+                  setMatrixOp({ type: 'transpose', result: transposed });
+                } catch (err) {
+                  window.alert(`Error: ${err.message}`);
+                }
+              }}
+              style={{
+                flex: 1,
+                padding: '10px',
+                background: theme.button,
+                color: theme.text,
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '13px'
+              }}
+            >
+              Transpose
+            </button>
+            <button
+              onClick={() => {
+                try {
+                  const A = matrix.map(row => row.map(v => parseComplex(v || '0')));
+                  const inverse = calculateInverse(A);
+                  setMatrixOp({ type: 'inverse', result: inverse });
+                } catch (err) {
+                  window.alert(`Error: ${err.message}`);
+                }
+              }}
+              style={{
+                flex: 1,
+                padding: '10px',
+                background: theme.button,
+                color: theme.text,
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '13px'
+              }}
+            >
+              Inverse
+            </button>
+            <button
+              onClick={() => setShowSteps(!showSteps)}
+              style={{
+                flex: 1,
+                padding: '10px',
+                background: showSteps ? theme.accent : theme.button,
+                color: showSteps ? '#ffffff' : theme.text,
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '13px'
+              }}
+            >
+              {showSteps ? 'Hide Steps' : 'Show Steps'}
+            </button>
+          </div>
+          
+          {/* Matrix Operation Result */}
+          {matrixOp && (
+            <div style={{
+              marginBottom: '15px',
+              padding: '15px',
+              background: theme.input,
+              borderRadius: '8px',
+              border: `2px solid ${theme.accent}`
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
+                  {matrixOp.type === 'transpose' ? 'Transposed Matrix' : 'Inverse Matrix'}
+                </div>
+                <button
+                  onClick={() => setMatrixOp(null)}
+                  style={{
+                    padding: '5px 10px',
+                    background: '#ff6b6b',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              <div style={{
+                overflowX: 'auto',
+                fontSize: '13px',
+                fontFamily: 'monospace'
+              }}>
+                {matrixOp.result.map((row, i) => (
+                  <div key={i} style={{ marginBottom: '5px' }}>
+                    [{row.map(val => toRect(val)).join(' | ')}]
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           
           {/* Custom Keyboard */}
           {activeInput && (
@@ -909,15 +1151,38 @@ const App = () => {
               fontSize: '14px',
               fontFamily: 'monospace'
             }}>
+              {history.length > 1 && (
+                <div style={{ 
+                  fontSize: '11px', 
+                  opacity: 0.6, 
+                  textAlign: 'center', 
+                  marginBottom: '10px',
+                  fontFamily: 'sans-serif'
+                }}>
+                  👆 Swipe left/right to navigate solutions
+                </div>
+              )}
               {history.length === 0 ? (
                 <p style={{ opacity: 0.5, textAlign: 'center' }}>No solutions yet</p>
               ) : (
                 history.map((h, idx) => (
-                  <div key={idx} style={{
-                    marginBottom: '20px',
-                    paddingBottom: '20px',
-                    borderBottom: `1px solid ${theme.border}`
-                  }}>
+                  <div 
+                    key={idx} 
+                    style={{
+                      marginBottom: '20px',
+                      paddingBottom: '20px',
+                      borderBottom: `1px solid ${theme.border}`,
+                      cursor: 'grab',
+                      transition: 'transform 0.2s ease, opacity 0.2s ease',
+                      transform: swipeIndex === idx && touchStart && touchEnd 
+                        ? `translateX(${(touchEnd - touchStart) * 0.3}px)` 
+                        : 'translateX(0)',
+                      opacity: swipeIndex === idx && touchStart && touchEnd ? 0.8 : 1
+                    }}
+                    onTouchStart={(e) => onTouchStart(e, idx)}
+                    onTouchMove={(e) => onTouchMove(e, idx)}
+                    onTouchEnd={() => onTouchEnd(idx)}
+                  >
                     <div style={{ fontWeight: 'bold', marginBottom: '10px' }}>
                       Solution #{history.length - idx}
                     </div>
@@ -929,6 +1194,59 @@ const App = () => {
                         x{i+1} = {val} | {h.x_rect[i]}
                       </div>
                     ))}
+                    {h.steps && h.steps.length > 0 && (
+                      <details style={{ marginTop: '15px' }}>
+                        <summary style={{ 
+                          cursor: 'pointer', 
+                          fontWeight: 'bold',
+                          padding: '5px',
+                          background: theme.button,
+                          borderRadius: '5px',
+                          marginBottom: '10px'
+                        }}>
+                          Step-by-Step Solution
+                        </summary>
+                        <div style={{ 
+                          maxHeight: '400px', 
+                          overflowY: 'auto',
+                          padding: '10px',
+                          background: theme.background,
+                          borderRadius: '8px'
+                        }}>
+                          {h.steps.map((step, stepIdx) => (
+                            <div key={stepIdx} style={{ 
+                              marginBottom: '15px',
+                              paddingBottom: '10px',
+                              borderBottom: stepIdx < h.steps.length - 1 ? `1px solid ${theme.border}` : 'none'
+                            }}>
+                              <div style={{ fontWeight: 'bold', marginBottom: '8px', color: theme.primary }}>
+                                Step {stepIdx + 1}: {step.description}
+                              </div>
+                              {step.matrix && (
+                                <div style={{ 
+                                  overflowX: 'auto',
+                                  fontSize: '13px',
+                                  fontFamily: 'monospace'
+                                }}>
+                                  {step.matrix.map((row, ri) => (
+                                    <div key={ri} style={{ marginBottom: '3px' }}>
+                                      [ {row.map(c => toRect(c)).join(' | ')} ]
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {step.variables && (
+                                <div style={{ fontSize: '14px' }}>
+                                  {step.variables.map((v, vi) => v ? (
+                                    <div key={vi}>x{vi + 1} = {toRect(v)}</div>
+                                  ) : null)}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
                   </div>
                 ))
               )}
