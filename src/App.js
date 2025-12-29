@@ -39,12 +39,12 @@ const parseComplex = (text) => {
 const toPolar = (c) => {
   const r = Math.sqrt(c.re * c.re + c.im * c.im);
   const ang = Math.atan2(c.im, c.re) * (180 / Math.PI);
-  return `${r.toPrecision(4)} ∠ ${ang.toPrecision(4)}°`;
+  return `${r.toFixed(2)} ∠ ${ang.toFixed(2)}°`;
 };
 
 const toRect = (c) => {
   const sign = c.im >= 0 ? '+' : '';
-  return `${c.re.toPrecision(4)} ${sign} ${c.im.toPrecision(4)}j`;
+  return `${c.re.toFixed(2)} ${sign} ${c.im.toFixed(2)}j`;
 };
 
 // Matrix solver using Gaussian elimination
